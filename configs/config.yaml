@@ -1,0 +1,48 @@
+# Cấu hình hệ thống xác định tọa độ 3D khối trụ
+camera:
+  device_index: 0
+  frame_width: 640
+  frame_height: 480
+  fps: 30
+  use_threaded_stream: true
+
+calibration:
+  calibration_file: "configs/camera_calibration.yaml"
+  chessboard_size: [9, 6]       # Số góc trong bàn cờ (columns, rows)
+  square_size_mm: 25.0          # Kích thước mỗi ô vuông bàn cờ (mm)
+  image_dir: "calibration/images"
+
+target_object:
+  d_real_m: 0.1                 # Đường kính thực tế của khối trụ (đơn vị: mét, vd: 0.1m = 10cm)
+  min_contour_area: 500         # Diện tích pixel tối thiểu để lọc nhiễu
+
+segmentation:
+  # Chế độ màu: "blue" (khối trụ xanh dương), "red" (khối trụ đỏ), hoặc "custom"
+  color_mode: "blue"
+
+  # Dải màu xanh dương tối ưu trên nền bảng trắng:
+  # Hue: 95 - 130 (xanh lam chuẩn)
+  # Saturation: 90 - 255 (loại bỏ hoàn toàn bảng trắng có S < 30)
+  # Value: 50 - 255 (loại bỏ bóng đổ tối)
+  blue_lower: [95, 90, 50]
+  blue_upper: [130, 255, 255]
+
+  # Dải màu khi ở chế độ "custom"
+  hsv_lower: [95, 90, 50]
+  hsv_upper: [130, 255, 255]
+
+  # Dải màu đỏ dự phòng nếu cần đổi lại
+  red_lower1: [0, 70, 50]
+  red_upper1: [10, 255, 255]
+  red_lower2: [165, 70, 50]
+  red_upper2: [180, 255, 255]
+
+  blur_kernel: 5                # Kích thước kernel làm mịn ảnh Gaussian Blur
+  morph_kernel: 5               # Kích thước kernel đóng/mở hình thái học
+
+filter:
+  enabled: true
+  filter_type: "moving_average" # "moving_average" hoặc "kalman"
+  window_size: 5                # Kích thước cửa sổ trượt trung bình (frames)
+  process_noise: 0.01           # Dùng cho Kalman filter
+  measurement_noise: 0.05       # Dùng cho Kalman filter
