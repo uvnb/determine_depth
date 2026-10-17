@@ -1,19 +1,11 @@
-# File ma trận thông số nội tại và hệ số méo của Camera
-# Được tạo tự động bởi script calibration/calibrate_camera.py
-# Các giá trị dưới đây là giá trị mặc định cho độ phân giải 640x480 (Pinhole xấp xỉ)
-
-image_width: 640
-image_height: 480
-
-# Ma trận nội tại K 3x3: [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
 camera_matrix:
-  - [600.0, 0.0, 320.0]
-  - [0.0, 600.0, 240.0]
-  - [0.0, 0.0, 1.0]
-
-# Hệ số méo thấu kính [k1, k2, p1, p2, k3]
+- [622.9065036604622, 0.0, 320.8318283764533]
+- [0.0, 616.9893634349631, 264.9949542089688]
+- [0.0, 0.0, 1.0]
 distortion_coefficients:
-  - [0.0, 0.0, 0.0, 0.0, 0.0]
-
-reprojection_error: 0.0
-is_calibrated: false
+- [0.12523331635013038, -0.27072309729910154, 0.0013439729095058117, -0.004326555922671646,
+  -0.005862110473028892]
+image_height: 480
+image_width: 640
+is_calibrated: true
+reprojection_error: 0.0670984441686843
