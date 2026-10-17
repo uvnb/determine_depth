@@ -14,6 +14,7 @@ import sys
 import time
 import cv2
 import numpy as np
+import argparse
 import yaml
 
 from core.camera_stream import CameraStream
@@ -141,6 +142,13 @@ def draw_hud(frame, detection, coords_3d, distance, fps, is_calibrated, filter_e
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
 
 def main():
+    parser = argparse.ArgumentParser(description="3D Cylinder Tracker (OpenCV + Pinhole)")
+    parser.add_argument("--headless", action="store_true", help="Chạy chế độ dòng lệnh không GUI (tối ưu cho Pi / SSH)")
+    args = parser.parse_args()
+
+    # Tự động chuyển sang chế độ headless nếu chạy qua SSH (không có biến DISPLAY)
+    headless = args.headless or ("DISPLAY" not in os.environ and sys.platform != "win32")
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
     cfg = load_config()
 
@@ -240,9 +248,14 @@ def main():
         stream.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
     window_name = "3D Cylinder Estimation (OpenCV Pinhole)"
-    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+    if not headless:
+        cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+    else:
+        print("[CHẾ ĐỘ HEADLESS] Đang chạy trên terminal (không mở cửa sổ GUI, tối ưu cho Raspberry Pi / SSH).")
+        print("Tọa độ 3D và FPS sẽ hiển thị liên tục bên dưới (Nhấn Ctrl+C để dừng):\n")
 
     prev_time = time.time()
+    last_print_time = 0.0
     fps_smooth = 30.0
     show_pip_mask = True
     snapshot_idx = 0
@@ -292,51 +305,69 @@ def main():
                 cur_fps = 1.0 / dt
                 fps_smooth = 0.9 * fps_smooth + 0.1 * cur_fps
 
-            # Vẽ HUD
-            draw_hud(
-                processed_frame,
-                detection,
-                coords_3d,
-                distance,
-                fps_smooth,
-                is_calibrated,
-                filter_enabled,
-                show_pip_mask=show_pip_mask,
-                serial_sender=serial_sender
-            )
+            if not headless:
+                # Vẽ HUD
+                draw_hud(
+                    processed_frame,
+                    detection,
+                    coords_3d,
+                    distance,
+                    fps_smooth,
+                    is_calibrated,
+                    filter_enabled,
+                    show_pip_mask=show_pip_mask,
+                    serial_sender=serial_sender
+                )
 
-            cv2.imshow(window_name, processed_frame)
+                cv2.imshow(window_name, processed_frame)
 
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q') or key == 27:
-                break
-            elif key == ord('u'):
-                detector.undistort_enabled = not detector.undistort_enabled
-                print(f"[STATUS] Khử méo thấu kính: {'BẬT' if detector.undistort_enabled else 'TẮT'}")
-            elif key == ord('f'):
-                filter_enabled = not filter_enabled
-                smooth_filter.reset()
-                print(f"[STATUS] Bộ lọc làm mịn: {'BẬT' if filter_enabled else 'TẮT'}")
-            elif key == ord('t'):
-                serial_sender.enabled = not serial_sender.enabled
-                if serial_sender.enabled and not serial_sender.is_connected:
-                    serial_sender.connect()
-                print(f"[STATUS] Cổng Serial UART: {'BẬT' if serial_sender.enabled else 'TẮT'}")
-            elif key == ord('m'):
-                show_pip_mask = not show_pip_mask
-            elif key == ord('s'):
-                snapshot_idx += 1
-                snap_path = f"snapshot_{snapshot_idx:03d}.jpg"
-                cv2.imwrite(snap_path, processed_frame)
-                print(f"[THÀNH CÔNG] Đã lưu snapshot: {snap_path}")
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q') or key == 27:
+                    break
+                elif key == ord('u'):
+                    detector.undistort_enabled = not detector.undistort_enabled
+                    print(f"[STATUS] Khử méo thấu kính: {'BẬT' if detector.undistort_enabled else 'TẮT'}")
+                elif key == ord('f'):
+                    filter_enabled = not filter_enabled
+                    smooth_filter.reset()
+                    print(f"[STATUS] Bộ lọc làm mịn: {'BẬT' if filter_enabled else 'TẮT'}")
+                elif key == ord('t'):
+                    serial_sender.enabled = not serial_sender.enabled
+                    if serial_sender.enabled and not serial_sender.is_connected:
+                        serial_sender.connect()
+                    print(f"[STATUS] Cổng Serial UART: {'BẬT' if serial_sender.enabled else 'TẮT'}")
+                elif key == ord('m'):
+                    show_pip_mask = not show_pip_mask
+                elif key == ord('s'):
+                    snapshot_idx += 1
+                    snap_path = f"snapshot_{snapshot_idx:03d}.jpg"
+                    cv2.imwrite(snap_path, processed_frame)
+                    print(f"[THÀNH CÔNG] Đã lưu snapshot: {snap_path}")
+            else:
+                # Chế độ headless: in trạng thái lên terminal mỗi 0.15s
+                cur_t = time.time()
+                if cur_t - last_print_time >= 0.15:
+                    last_print_time = cur_t
+                    if detection["found"]:
+                        u_stat = f"| UART: {'OK' if (serial_sender and serial_sender.is_connected) else 'NO_CONN'}" if serial_sender.enabled else ""
+                        sys.stdout.write(
+                            f"\r[FPS: {fps_smooth:4.1f}] TÌM THẤY | X: {coords_3d[0]:+6.3f}m | Y: {coords_3d[1]:+6.3f}m | Z: {coords_3d[2]:6.3f}m | D_real: {distance:6.3f}m | w_px: {detection['w_px']:3.0f} {u_stat}   "
+                        )
+                    else:
+                        sys.stdout.write(f"\r[FPS: {fps_smooth:4.1f}] ĐANG TÌM KHỐI TRỤ TRÊN BẢNG TRẮNG...                              ")
+                    sys.stdout.flush()
+                time.sleep(0.001)
 
+    except KeyboardInterrupt:
+        print("\n[THÔNG BÁO] Nhận tín hiệu ngắt (Ctrl+C).")
     finally:
         serial_sender.close()
         if use_threaded:
             stream.stop()
         else:
             stream.release()
-        cv2.destroyAllWindows()
+        if not headless:
+            cv2.destroyAllWindows()
         print("\nĐã đóng chương trình an toàn.")
 
 if __name__ == "__main__":
