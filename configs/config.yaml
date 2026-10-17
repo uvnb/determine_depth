@@ -5,8 +5,6 @@ camera:
   frame_height: 480
   fps: 30
   use_threaded_stream: true
-  target_loop_fps: 30           # Giới hạn FPS xử lý (30 FPS chuẩn cho Pixhawk, 0 = không giới hạn). Tiết kiệm ~65% CPU cho mô hình AI!
-
 
 calibration:
   calibration_file: "configs/camera_calibration.yaml"
@@ -48,8 +46,8 @@ segmentation:
   red_lower2: [165, 70, 50]
   red_upper2: [180, 255, 255]
 
-  blur_kernel: 3                # Kích thước kernel làm mịn ảnh Gaussian Blur (3x3 nhanh gấp đôi 5x5)
-  morph_kernel: 3               # Kích thước kernel đóng/mở hình thái học (3x3 tối ưu CPU Pi 4B)
+  blur_kernel: 5                # Kích thước kernel làm mịn ảnh Gaussian Blur
+  morph_kernel: 5               # Kích thước kernel đóng/mở hình thái học
 
 filter:
   enabled: true
@@ -65,10 +63,17 @@ serial:
   format: "string"              # Định dạng gửi: "string" (X:.. Y:.. Z:..) hoặc "json"
   send_rate_hz: 30              # Tần số gửi tọa độ tối đa (Hz)
 
-web_stream:
-  enabled: true                 # Bật/Tắt luồng stream video trực tiếp qua web local
-  host: "0.0.0.0"               # Lắng nghe trên mọi IP để Laptop xem được
-  port: 8080                    # Cổng truy cập web (Mở browser: http://<IP_PI>:8080)
-  stream_fps: 20                # 20 FPS là đủ mượt cho quan sát, tiết kiệm CPU
-  jpeg_quality: 65              # Chất lượng nén ảnh JPEG (65% tối ưu đường truyền và CPU)
+# Tối ưu hóa hiệu năng & phân bổ lõi CPU cho Raspberry Pi 4B
+performance:
+  max_fps: 30                   # Giới hạn FPS xử lý (tránh lặp frame vô ích, giải phóng CPU cho AI & Pixhawk)
+  opencv_threads: 1             # Số luồng OpenCV (1 luồng để cô lập trên 1 lõi duy nhất)
+  target_cpu_core: 1            # Ghim vào Core 1 (giữ Core 0 cho Pixhawk/ESP32, Core 2-3 cho AI)
+
+# Luồng hiển thị video trực tiếp (Local Stream)
+local_stream:
+  enabled: true                 # Kích hoạt Web Streamer (xem qua trình duyệt máy tính/điện thoại)
+  host: "0.0.0.0"               # Lắng nghe mọi card mạng
+  port: 8080                    # Cổng truy cập Web: http://<IP_Pi>:8080 (ví dụ http://192.168.50.1:8080)
+  stream_fps: 15                # FPS của luồng xem hiển thị (15 FPS là đủ mượt mà tiêu thụ < 3% CPU)
+  jpeg_quality: 65              # Chất lượng nén JPEG (50 - 75 để tối ưu hóa truyền dẫn và CPU)
 

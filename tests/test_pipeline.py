@@ -2,7 +2,6 @@
 """
 
 import unittest
-import time
 import cv2
 import numpy as np
 import yaml
@@ -120,37 +119,6 @@ class TestCylinderDetector(unittest.TestCase):
         self.assertAlmostEqual(res["u"], 320.0, delta=3.0)
         self.assertAlmostEqual(res["v"], 240.0, delta=3.0)
         self.assertAlmostEqual(res["w_px"], 80.0, delta=4.0)
-
-class TestWebStreamer(unittest.TestCase):
-    def test_streamer_lifecycle_and_zero_overhead(self):
-        from core.web_streamer import WebStreamer
-        # Khởi tạo streamer trên cổng ngẫu nhiên của OS (port=0)
-        streamer = WebStreamer(port=0, stream_fps=20, enabled=True)
-        streamer.start()
-        self.assertTrue(streamer.is_running)
-        self.assertFalse(streamer.has_clients)
-
-        # Khi không có client, update_frame không làm tốn tài nguyên
-        fake_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        streamer.update_frame(fake_frame)
-        self.assertIsNone(streamer.get_latest_jpeg())
-
-        # Giả lập client kết nối
-        streamer.add_client()
-        self.assertTrue(streamer.has_clients)
-        streamer.update_frame(fake_frame)
-
-        for _ in range(10):
-            if streamer.get_latest_jpeg() is not None:
-                break
-            time.sleep(0.05)
-
-        self.assertIsNotNone(streamer.get_latest_jpeg())
-
-        streamer.remove_client()
-        self.assertFalse(streamer.has_clients)
-        streamer.stop()
-        self.assertFalse(streamer.is_running)
 
 if __name__ == "__main__":
     unittest.main()

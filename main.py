@@ -22,6 +22,7 @@ from core.cylinder_detector import CylinderDetector
 from core.pinhole_3d import Pinhole3DEstimator
 from core.tracker_filter import MovingAverageFilter3D, KalmanFilter3D
 from core.serial_comm import SerialSender
+from core.system_monitor import SystemMonitor
 from core.web_streamer import WebStreamer
 
 def load_config():
@@ -53,7 +54,7 @@ def load_calibration(calib_file_rel, base_dir):
         print(f"[LỖI] Đọc file calibration thất bại: {e}")
         return None, None, False
 
-def draw_hud(frame, detection, coords_3d, distance, fps, is_calibrated, filter_enabled, show_pip_mask=True, serial_sender=None):
+def draw_hud(frame, detection, coords_3d, distance, fps, is_calibrated, filter_enabled, show_pip_mask=True, serial_sender=None, cpu_temp=-1.0):
     """Vẽ giao diện hiển thị thông tin thực tế (HUD) lên khung hình."""
     h, w = frame.shape[:2]
 
@@ -62,19 +63,27 @@ def draw_hud(frame, detection, coords_3d, distance, fps, is_calibrated, filter_e
     cv2.rectangle(overlay, (0, 0), (w, 40), (20, 20, 20), -1)
     cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
 
-    calib_str = "CALIBRATED" if is_calibrated else "DEFAULT INTRINSICS"
+    calib_str = "CALIB" if is_calibrated else "DEFAULT"
     calib_color = (0, 255, 0) if is_calibrated else (0, 165, 255)
-    cv2.putText(frame, f"3D CYLINDER TRACKER | {calib_str}", (15, 26),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, calib_color, 2)
+    cv2.putText(frame, f"3D CYLINDER | {calib_str}", (12, 26),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, calib_color, 2)
 
     # Hiển thị trạng thái UART Serial nếu có
-    if serial_sender and serial_sender.enabled:
-        u_text = f"UART: {'CONN' if serial_sender.is_connected else 'NO USB'}"
-        u_color = (0, 255, 0) if serial_sender.is_connected else (0, 0, 255)
-        cv2.putText(frame, u_text, (w - 240, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.5, u_color, 2)
+    right_offset = w - 10
+    fps_text = f"FPS: {fps:.1f}"
+    cv2.putText(frame, fps_text, (right_offset - 85, 26),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2)
 
-    cv2.putText(frame, f"FPS: {fps:.1f}", (w - 95, 26),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+    if cpu_temp > 0:
+        temp_text = f"{cpu_temp:.0f}C"
+        t_color = (0, 255, 0) if cpu_temp < 65 else ((0, 165, 255) if cpu_temp < 75 else (0, 0, 255))
+        cv2.putText(frame, temp_text, (right_offset - 145, 26),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.52, t_color, 2)
+
+    if serial_sender and serial_sender.enabled:
+        u_text = f"UART: {'OK' if serial_sender.is_connected else 'NO'}"
+        u_color = (0, 255, 0) if serial_sender.is_connected else (0, 0, 255)
+        cv2.putText(frame, u_text, (right_offset - 245, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.48, u_color, 1)
 
     if detection["found"]:
         u, v = int(detection["u"]), int(detection["v"])
@@ -164,7 +173,6 @@ def main():
     width = cam_cfg.get("frame_width", 640)
     height = cam_cfg.get("frame_height", 480)
     fps_target = cam_cfg.get("fps", 30)
-    target_loop_fps = int(cam_cfg.get("target_loop_fps", 30))
     use_threaded = cam_cfg.get("use_threaded_stream", True)
 
     d_real = float(obj_cfg.get("d_real_m", 0.05))
@@ -199,18 +207,6 @@ def main():
         data_format=serial_cfg.get("format", "string"),
         send_rate_hz=serial_cfg.get("send_rate_hz", 30)
     )
-
-    # Khởi tạo module phát video trực tiếp qua Web MJPEG (không làm nghẽn luồng xử lý)
-    web_stream_cfg = cfg.get("web_stream", {})
-    web_streamer = WebStreamer(
-        host=web_stream_cfg.get("host", "0.0.0.0"),
-        port=web_stream_cfg.get("port", 8080),
-        stream_fps=web_stream_cfg.get("stream_fps", 25),
-        jpeg_quality=web_stream_cfg.get("jpeg_quality", 70),
-        enabled=web_stream_cfg.get("enabled", True)
-    )
-    if web_streamer.enabled:
-        web_streamer.start()
 
     # Khởi tạo các module
     color_mode = seg_cfg.get("color_mode", "blue")
@@ -261,6 +257,27 @@ def main():
         stream.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         stream.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
+    # Đọc cấu hình tối ưu hiệu năng & luồng hiển thị
+    perf_cfg = cfg.get("performance", {})
+    max_fps = int(perf_cfg.get("max_fps", 30))
+    target_core = perf_cfg.get("target_cpu_core", 1)
+    opencv_threads = int(perf_cfg.get("opencv_threads", 1))
+
+    # Cấu hình tối ưu CPU (Ghim Core 1, giới hạn OpenCV 1 thread để chừa Core 0 cho Pixhawk/ESP32, Core 2-3 cho AI)
+    sys_monitor = SystemMonitor(target_core=target_core, opencv_threads=opencv_threads)
+
+    # Khởi tạo Web Streamer nếu được bật
+    stream_cfg = cfg.get("local_stream", {})
+    web_streamer = None
+    if stream_cfg.get("enabled", True):
+        web_streamer = WebStreamer(
+            host=stream_cfg.get("host", "0.0.0.0"),
+            port=int(stream_cfg.get("port", 8080)),
+            stream_fps=int(stream_cfg.get("stream_fps", 15)),
+            jpeg_quality=int(stream_cfg.get("jpeg_quality", 65))
+        )
+        web_streamer.start()
+
     window_name = "3D Cylinder Estimation (OpenCV Pinhole)"
     if not headless:
         cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
@@ -270,17 +287,23 @@ def main():
 
     prev_time = time.time()
     last_print_time = 0.0
+    last_temp_time = 0.0
+    cur_cpu_temp = -1.0
     fps_smooth = 30.0
     show_pip_mask = True
     snapshot_idx = 0
+
+    cur_frame_id = -1
+    min_frame_interval = 1.0 / max(1, max_fps) if max_fps > 0 else 0.0
 
     try:
         while True:
             t_start = time.time()
             if use_threaded:
-                ret, frame = stream.read()
+                ret, frame, cur_frame_id = stream.read(wait_new=True, last_frame_id=cur_frame_id)
             else:
                 ret, frame = stream.read()
+                cur_frame_id += 1
 
             if not ret or frame is None:
                 time.sleep(0.005)
@@ -319,11 +342,16 @@ def main():
                 cur_fps = 1.0 / dt
                 fps_smooth = 0.9 * fps_smooth + 0.1 * cur_fps
 
-            # Kiểm tra xem có cần vẽ giao diện HUD không (nếu mở GUI hoặc có client đang xem qua web stream)
-            need_hud = (not headless) or web_streamer.has_clients
-            if need_hud:
+            # Cập nhật nhiệt độ CPU định kỳ mỗi 1.0s
+            if time.time() - last_temp_time >= 1.0:
+                last_temp_time = time.time()
+                cur_cpu_temp = sys_monitor.get_cpu_temp()
+
+            # Vẽ HUD lên khung hình nếu có GUI hoặc Web Streamer
+            if not headless or web_streamer:
+                hud_frame = processed_frame.copy()
                 draw_hud(
-                    processed_frame,
+                    hud_frame,
                     detection,
                     coords_3d,
                     distance,
@@ -331,12 +359,14 @@ def main():
                     is_calibrated,
                     filter_enabled,
                     show_pip_mask=show_pip_mask,
-                    serial_sender=serial_sender
+                    serial_sender=serial_sender,
+                    cpu_temp=cur_cpu_temp
                 )
-                web_streamer.update_frame(processed_frame)
+                if web_streamer:
+                    web_streamer.update_frame(hud_frame)
 
             if not headless:
-                cv2.imshow(window_name, processed_frame)
+                cv2.imshow(window_name, hud_frame)
 
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q') or key == 27:
@@ -358,35 +388,35 @@ def main():
                 elif key == ord('s'):
                     snapshot_idx += 1
                     snap_path = f"snapshot_{snapshot_idx:03d}.jpg"
-                    cv2.imwrite(snap_path, processed_frame)
+                    cv2.imwrite(snap_path, hud_frame)
                     print(f"[THÀNH CÔNG] Đã lưu snapshot: {snap_path}")
             else:
                 # Chế độ headless: in trạng thái lên terminal mỗi 0.15s
                 cur_t = time.time()
                 if cur_t - last_print_time >= 0.15:
                     last_print_time = cur_t
+                    temp_str = f" | {cur_cpu_temp:.0f}C" if cur_cpu_temp > 0 else ""
                     if detection["found"]:
                         u_stat = f"| UART: {'OK' if (serial_sender and serial_sender.is_connected) else 'NO_CONN'}" if serial_sender.enabled else ""
                         sys.stdout.write(
-                            f"\r[FPS: {fps_smooth:4.1f}] TÌM THẤY | X: {coords_3d[0]:+6.3f}m | Y: {coords_3d[1]:+6.3f}m | Z: {coords_3d[2]:6.3f}m | D_real: {distance:6.3f}m | w_px: {detection['w_px']:3.0f} {u_stat}   "
+                            f"\r[FPS: {fps_smooth:4.1f}{temp_str}] TÌM THẤY | X: {coords_3d[0]:+6.3f}m | Y: {coords_3d[1]:+6.3f}m | Z: {coords_3d[2]:6.3f}m | D: {distance:6.3f}m | w_px: {detection['w_px']:3.0f} {u_stat}   "
                         )
                     else:
-                        sys.stdout.write(f"\r[FPS: {fps_smooth:4.1f}] ĐANG TÌM KHỐI TRỤ TRÊN BẢNG TRẮNG...                              ")
+                        sys.stdout.write(f"\r[FPS: {fps_smooth:4.1f}{temp_str}] ĐANG TÌM KHỐI TRỤ TRÊN BẢNG TRẮNG...                              ")
                     sys.stdout.flush()
 
-            # Giới hạn tốc độ vòng lặp để giải phóng CPU cho Pixhawk và mô hình AI
-            if target_loop_fps > 0:
+            # Giới hạn FPS (FPS Capping) để tiết kiệm CPU cho AI, Pixhawk và ESP32
+            if min_frame_interval > 0:
                 elapsed = time.time() - t_start
-                target_period = 1.0 / target_loop_fps
-                if elapsed < target_period:
-                    time.sleep(target_period - elapsed)
-            else:
-                time.sleep(0.001)
+                rest = min_frame_interval - elapsed
+                if rest > 0.001:
+                    time.sleep(rest)
 
     except KeyboardInterrupt:
         print("\n[THÔNG BÁO] Nhận tín hiệu ngắt (Ctrl+C).")
     finally:
-        web_streamer.stop()
+        if web_streamer:
+            web_streamer.stop()
         serial_sender.close()
         if use_threaded:
             stream.stop()
