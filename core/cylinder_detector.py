@@ -185,30 +185,35 @@ class CylinderDetector:
         if area < self.min_area:
             return result
 
-        # Tính toán bounding box chuẩn
+        # Sử dụng minAreaRect để đo đường kính chính xác theo góc nghiêng của vật thể
+        # Giúp tránh triệt để sai số: khi khối trụ bị nghiêng dù chỉ 10 độ, boundingRect sẽ phình to thêm 33%!
+        rect = cv2.minAreaRect(largest_contour)
+        (center_x, center_y), (rect_w, rect_h), angle = rect
+
+        # Đường kính khối trụ luôn là cạnh ngắn (chiều ngang mặt cắt), chiều cao là cạnh dài
+        diameter_px = min(rect_w, rect_h)
+        height_px = max(rect_w, rect_h)
+
+        # Bounding box thẳng đứng để vẽ khung hiển thị
         x, y, w, h = cv2.boundingRect(largest_contour)
 
-        # Tính trọng tâm chính xác theo Moments nếu có thể
+        # Tính trọng tâm chính xác theo Moments
         moments = cv2.moments(largest_contour)
         if moments["m00"] != 0:
             u = moments["m10"] / moments["m00"]
             v = moments["m01"] / moments["m00"]
         else:
-            u = x + w / 2.0
-            v = y + h / 2.0
-
-        # Nếu khối trụ đứng trên bảng trắng:
-        # Đường kính mặt cắt ngang chính là chiều rộng w của bounding box
-        w_px = float(w)
-        h_px = float(h)
+            u = center_x
+            v = center_y
 
         result.update({
             "found": True,
             "u": float(u),
             "v": float(v),
-            "w_px": w_px,
-            "h_px": h_px,
+            "w_px": float(diameter_px),
+            "h_px": float(height_px),
             "bbox": (x, y, w, h),
+            "rotated_rect": rect,
             "contour": largest_contour
         })
 

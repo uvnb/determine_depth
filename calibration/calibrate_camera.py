@@ -71,11 +71,17 @@ def main():
 
         if ret:
             valid_images += 1
-            # Tinh chỉnh độ chính xác góc bàn cờ đến mức sub-pixel
-            corners_sub = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+            # Tính kích thước trung bình của ô vuông trong ảnh này để chọn cửa sổ sub-pixel an toàn
+            c_reshaped = corners.reshape(-1, 2)
+            dists = np.linalg.norm(c_reshaped[1:] - c_reshaped[:-1], axis=1)
+            mean_sq = float(np.median(dists)) if len(dists) > 0 else 20.0
+
+            # Cửa sổ sub-pixel an toàn (tối đa 1/5 cạnh ô vuông, tránh lấn sang ô bên cạnh gây sai tiêu cự)
+            w_sub = max(2, min(4, int(mean_sq / 5.0)))
+            corners_sub = cv2.cornerSubPix(gray, corners, (w_sub, w_sub), (-1, -1), criteria)
             objpoints.append(active_objp)
             imgpoints.append(corners_sub)
-            print(f"  [{idx}/{len(image_files)}] OK: {os.path.basename(fname)}")
+            print(f"  [{idx}/{len(image_files)}] OK (ô ~ {mean_sq:.1f}px, win={w_sub}x{w_sub}): {os.path.basename(fname)}")
         else:
             print(f"  [{idx}/{len(image_files)}] BỎ QUA (không phát hiện đủ {cb_size[0]}x{cb_size[1]} góc): {os.path.basename(fname)}")
 
