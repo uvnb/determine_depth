@@ -164,6 +164,7 @@ def main():
     width = cam_cfg.get("frame_width", 640)
     height = cam_cfg.get("frame_height", 480)
     fps_target = cam_cfg.get("fps", 30)
+    target_loop_fps = int(cam_cfg.get("target_loop_fps", 30))
     use_threaded = cam_cfg.get("use_threaded_stream", True)
 
     d_real = float(obj_cfg.get("d_real_m", 0.05))
@@ -372,6 +373,14 @@ def main():
                     else:
                         sys.stdout.write(f"\r[FPS: {fps_smooth:4.1f}] ĐANG TÌM KHỐI TRỤ TRÊN BẢNG TRẮNG...                              ")
                     sys.stdout.flush()
+
+            # Giới hạn tốc độ vòng lặp để giải phóng CPU cho Pixhawk và mô hình AI
+            if target_loop_fps > 0:
+                elapsed = time.time() - t_start
+                target_period = 1.0 / target_loop_fps
+                if elapsed < target_period:
+                    time.sleep(target_period - elapsed)
+            else:
                 time.sleep(0.001)
 
     except KeyboardInterrupt:

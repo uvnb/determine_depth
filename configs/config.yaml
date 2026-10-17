@@ -5,6 +5,8 @@ camera:
   frame_height: 480
   fps: 30
   use_threaded_stream: true
+  target_loop_fps: 30           # Giới hạn FPS xử lý (30 FPS chuẩn cho Pixhawk, 0 = không giới hạn). Tiết kiệm ~65% CPU cho mô hình AI!
+
 
 calibration:
   calibration_file: "configs/camera_calibration.yaml"
@@ -46,8 +48,8 @@ segmentation:
   red_lower2: [165, 70, 50]
   red_upper2: [180, 255, 255]
 
-  blur_kernel: 5                # Kích thước kernel làm mịn ảnh Gaussian Blur
-  morph_kernel: 5               # Kích thước kernel đóng/mở hình thái học
+  blur_kernel: 3                # Kích thước kernel làm mịn ảnh Gaussian Blur (3x3 nhanh gấp đôi 5x5)
+  morph_kernel: 3               # Kích thước kernel đóng/mở hình thái học (3x3 tối ưu CPU Pi 4B)
 
 filter:
   enabled: true
@@ -67,6 +69,6 @@ web_stream:
   enabled: true                 # Bật/Tắt luồng stream video trực tiếp qua web local
   host: "0.0.0.0"               # Lắng nghe trên mọi IP để Laptop xem được
   port: 8080                    # Cổng truy cập web (Mở browser: http://<IP_PI>:8080)
-  stream_fps: 25                # Giới hạn FPS của luồng stream để không ảnh hưởng FPS nhận diện
-  jpeg_quality: 70              # Chất lượng nén ảnh JPEG (50 - 80 tối ưu đường truyền)
+  stream_fps: 20                # 20 FPS là đủ mượt cho quan sát, tiết kiệm CPU
+  jpeg_quality: 65              # Chất lượng nén ảnh JPEG (65% tối ưu đường truyền và CPU)
 
