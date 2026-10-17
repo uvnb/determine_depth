@@ -62,3 +62,11 @@ serial:
   baudrate: 115200              # Tốc độ baudrate (115200 hoặc 9600)
   format: "string"              # Định dạng gửi: "string" (X:.. Y:.. Z:..) hoặc "json"
   send_rate_hz: 30              # Tần số gửi tọa độ tối đa (Hz)
+
+web_stream:
+  enabled: true                 # Bật/Tắt luồng stream video trực tiếp qua web local
+  host: "0.0.0.0"               # Lắng nghe trên mọi IP để Laptop xem được
+  port: 8080                    # Cổng truy cập web (Mở browser: http://<IP_PI>:8080)
+  stream_fps: 25                # Giới hạn FPS của luồng stream để không ảnh hưởng FPS nhận diện
+  jpeg_quality: 70              # Chất lượng nén ảnh JPEG (50 - 80 tối ưu đường truyền)
+

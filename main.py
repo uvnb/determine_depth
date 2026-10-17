@@ -22,6 +22,7 @@ from core.cylinder_detector import CylinderDetector
 from core.pinhole_3d import Pinhole3DEstimator
 from core.tracker_filter import MovingAverageFilter3D, KalmanFilter3D
 from core.serial_comm import SerialSender
+from core.web_streamer import WebStreamer
 
 def load_config():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -198,6 +199,18 @@ def main():
         send_rate_hz=serial_cfg.get("send_rate_hz", 30)
     )
 
+    # Khởi tạo module phát video trực tiếp qua Web MJPEG (không làm nghẽn luồng xử lý)
+    web_stream_cfg = cfg.get("web_stream", {})
+    web_streamer = WebStreamer(
+        host=web_stream_cfg.get("host", "0.0.0.0"),
+        port=web_stream_cfg.get("port", 8080),
+        stream_fps=web_stream_cfg.get("stream_fps", 25),
+        jpeg_quality=web_stream_cfg.get("jpeg_quality", 70),
+        enabled=web_stream_cfg.get("enabled", True)
+    )
+    if web_streamer.enabled:
+        web_streamer.start()
+
     # Khởi tạo các module
     color_mode = seg_cfg.get("color_mode", "blue")
     detector = CylinderDetector(
@@ -305,8 +318,9 @@ def main():
                 cur_fps = 1.0 / dt
                 fps_smooth = 0.9 * fps_smooth + 0.1 * cur_fps
 
-            if not headless:
-                # Vẽ HUD
+            # Kiểm tra xem có cần vẽ giao diện HUD không (nếu mở GUI hoặc có client đang xem qua web stream)
+            need_hud = (not headless) or web_streamer.has_clients
+            if need_hud:
                 draw_hud(
                     processed_frame,
                     detection,
@@ -318,7 +332,9 @@ def main():
                     show_pip_mask=show_pip_mask,
                     serial_sender=serial_sender
                 )
+                web_streamer.update_frame(processed_frame)
 
+            if not headless:
                 cv2.imshow(window_name, processed_frame)
 
                 key = cv2.waitKey(1) & 0xFF
@@ -361,6 +377,7 @@ def main():
     except KeyboardInterrupt:
         print("\n[THÔNG BÁO] Nhận tín hiệu ngắt (Ctrl+C).")
     finally:
+        web_streamer.stop()
         serial_sender.close()
         if use_threaded:
             stream.stop()
