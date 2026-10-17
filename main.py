@@ -20,6 +20,7 @@ from core.camera_stream import CameraStream
 from core.cylinder_detector import CylinderDetector
 from core.pinhole_3d import Pinhole3DEstimator
 from core.tracker_filter import MovingAverageFilter3D, KalmanFilter3D
+from core.serial_comm import SerialSender
 
 def load_config():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -50,7 +51,7 @@ def load_calibration(calib_file_rel, base_dir):
         print(f"[LỖI] Đọc file calibration thất bại: {e}")
         return None, None, False
 
-def draw_hud(frame, detection, coords_3d, distance, fps, is_calibrated, filter_enabled, show_pip_mask=True):
+def draw_hud(frame, detection, coords_3d, distance, fps, is_calibrated, filter_enabled, show_pip_mask=True, serial_sender=None):
     """Vẽ giao diện hiển thị thông tin thực tế (HUD) lên khung hình."""
     h, w = frame.shape[:2]
 
@@ -64,7 +65,13 @@ def draw_hud(frame, detection, coords_3d, distance, fps, is_calibrated, filter_e
     cv2.putText(frame, f"3D CYLINDER TRACKER | {calib_str}", (15, 26),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, calib_color, 2)
 
-    cv2.putText(frame, f"FPS: {fps:.1f}", (w - 110, 26),
+    # Hiển thị trạng thái UART Serial nếu có
+    if serial_sender and serial_sender.enabled:
+        u_text = f"UART: {'CONN' if serial_sender.is_connected else 'NO USB'}"
+        u_color = (0, 255, 0) if serial_sender.is_connected else (0, 0, 255)
+        cv2.putText(frame, u_text, (w - 240, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.5, u_color, 2)
+
+    cv2.putText(frame, f"FPS: {fps:.1f}", (w - 95, 26),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
     if detection["found"]:
@@ -102,7 +109,8 @@ def draw_hud(frame, detection, coords_3d, distance, fps, is_calibrated, filter_e
 
     # 3. Góc dưới: Hướng dẫn phím tắt
     filter_status = "ON" if filter_enabled else "OFF"
-    help_text = f"[q]: Thoat | [u]: Khử méo | [f]: Lọc mượt ({filter_status}) | [m]: Xem Mask | [s]: Chụp ảnh"
+    uart_status = "ON" if (serial_sender and serial_sender.enabled) else "OFF"
+    help_text = f"[q]: Thoat | [u]: Khử méo | [f]: Lọc ({filter_status}) | [t]: UART ({uart_status}) | [s]: Chụp"
     cv2.putText(frame, help_text, (15, h - 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
 
@@ -133,6 +141,7 @@ def main():
     obj_cfg = cfg.get("target_object", {})
     seg_cfg = cfg.get("segmentation", {})
     filter_cfg = cfg.get("filter", {})
+    serial_cfg = cfg.get("serial", {})
 
     dev_idx = cam_cfg.get("device_index", 0)
     width = cam_cfg.get("frame_width", 640)
@@ -140,8 +149,8 @@ def main():
     fps_target = cam_cfg.get("fps", 30)
     use_threaded = cam_cfg.get("use_threaded_stream", True)
 
-    d_real = float(obj_cfg.get("d_real_m", 0.1))
-    min_area = float(obj_cfg.get("min_contour_area", 500))
+    d_real = float(obj_cfg.get("d_real_m", 0.05))
+    min_area = float(obj_cfg.get("min_contour_area", 300))
 
     # Tải thông số hiệu chuẩn camera
     calib_file = calib_cfg.get("calibration_file", "configs/camera_calibration.yaml")
@@ -163,6 +172,15 @@ def main():
     print(f"- Đường kính khối trụ D_real: {d_real} m ({d_real*100:.1f} cm)")
     print(f"- Thông số Pinhole: fx={fx:.1f}, fy={fy:.1f}, cx={cx:.1f}, cy={cy:.1f}")
     print(f"- Trạng thái hiệu chuẩn: {'ĐÃ HIỆU CHUẨN' if is_calibrated else 'MẶC ĐỊNH'}\n")
+
+    # Khởi tạo module Serial UART (USB)
+    serial_sender = SerialSender(
+        port=serial_cfg.get("port", "/dev/ttyUSB0"),
+        baudrate=serial_cfg.get("baudrate", 115200),
+        enabled=serial_cfg.get("enabled", False),
+        data_format=serial_cfg.get("format", "string"),
+        send_rate_hz=serial_cfg.get("send_rate_hz", 30)
+    )
 
     # Khởi tạo các module
     color_mode = seg_cfg.get("color_mode", "blue")
@@ -249,6 +267,9 @@ def main():
                 coords_3d = (0.0, 0.0, 0.0)
                 distance = 0.0
 
+            # Gửi dữ liệu tọa độ qua Serial UART tới vi điều khiển
+            serial_sender.send(detection["found"], coords_3d[0], coords_3d[1], coords_3d[2], distance)
+
             # Tính toán FPS
             dt = time.time() - prev_time
             prev_time = time.time()
@@ -265,7 +286,8 @@ def main():
                 fps_smooth,
                 is_calibrated,
                 filter_enabled,
-                show_pip_mask=show_pip_mask
+                show_pip_mask=show_pip_mask,
+                serial_sender=serial_sender
             )
 
             cv2.imshow(window_name, processed_frame)
@@ -280,6 +302,11 @@ def main():
                 filter_enabled = not filter_enabled
                 smooth_filter.reset()
                 print(f"[STATUS] Bộ lọc làm mịn: {'BẬT' if filter_enabled else 'TẮT'}")
+            elif key == ord('t'):
+                serial_sender.enabled = not serial_sender.enabled
+                if serial_sender.enabled and not serial_sender.is_connected:
+                    serial_sender.connect()
+                print(f"[STATUS] Cổng Serial UART: {'BẬT' if serial_sender.enabled else 'TẮT'}")
             elif key == ord('m'):
                 show_pip_mask = not show_pip_mask
             elif key == ord('s'):
@@ -289,6 +316,7 @@ def main():
                 print(f"[THÀNH CÔNG] Đã lưu snapshot: {snap_path}")
 
     finally:
+        serial_sender.close()
         if use_threaded:
             stream.stop()
         else:

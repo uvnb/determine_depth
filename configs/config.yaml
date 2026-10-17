@@ -9,12 +9,13 @@ camera:
 calibration:
   calibration_file: "configs/camera_calibration.yaml"
   chessboard_size: [9, 6]       # Số góc trong bàn cờ (columns, rows)
-  square_size_mm: 25.0          # Kích thước mỗi ô vuông bàn cờ (mm)
+  square_size_mm: 24.0          # Kích thước mỗi ô vuông bàn cờ (mm - đã cập nhật theo thước đo 24mm)
   image_dir: "calibration/images"
 
 target_object:
-  d_real_m: 0.1                 # Đường kính thực tế của khối trụ (đơn vị: mét, vd: 0.1m = 10cm)
-  min_contour_area: 500         # Diện tích pixel tối thiểu để lọc nhiễu
+  d_real_m: 0.05                # Đường kính thực tế của khối trụ: 5 cm = 0.05 mét
+  h_real_m: 0.10                # Chiều cao thực tế của khối trụ: 10 cm = 0.10 mét
+  min_contour_area: 300         # Diện tích pixel tối thiểu để lọc nhiễu (giảm nhẹ để nhận diện d=5cm ở xa)
 
 segmentation:
   # Chế độ màu: "blue" (khối trụ xanh dương), "red" (khối trụ đỏ), hoặc "custom"
@@ -46,3 +47,10 @@ filter:
   window_size: 5                # Kích thước cửa sổ trượt trung bình (frames)
   process_noise: 0.01           # Dùng cho Kalman filter
   measurement_noise: 0.05       # Dùng cho Kalman filter
+
+serial:
+  enabled: false                # Bật/Tắt truyền tọa độ qua cổng USB Serial / UART
+  port: "/dev/ttyUSB0"          # Cổng serial (Linux: /dev/ttyUSB0, /dev/ttyACM0; Windows: COM3...)
+  baudrate: 115200              # Tốc độ baudrate (115200 hoặc 9600)
+  format: "string"              # Định dạng gửi: "string" (X:.. Y:.. Z:..) hoặc "json"
+  send_rate_hz: 30              # Tần số gửi tọa độ tối đa (Hz)

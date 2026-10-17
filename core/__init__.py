@@ -4,11 +4,13 @@ from .camera_stream import CameraStream
 from .cylinder_detector import CylinderDetector
 from .pinhole_3d import Pinhole3DEstimator
 from .tracker_filter import MovingAverageFilter3D, KalmanFilter3D
+from .serial_comm import SerialSender
 
 __all__ = [
     "CameraStream",
     "CylinderDetector",
     "Pinhole3DEstimator",
     "MovingAverageFilter3D",
-    "KalmanFilter3D"
+    "KalmanFilter3D",
+    "SerialSender"
 ]
