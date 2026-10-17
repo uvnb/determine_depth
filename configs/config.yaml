@@ -8,8 +8,8 @@ camera:
 
 calibration:
   calibration_file: "configs/camera_calibration.yaml"
-  chessboard_size: [9, 6]       # Số góc trong bàn cờ (columns, rows)
-  square_size_mm: 24.0          # Kích thước mỗi ô vuông bàn cờ (mm - đã cập nhật theo thước đo 24mm)
+  chessboard_size: [7, 10]      # 88 ô vuông (8 cột x 11 hàng) -> 7 x 10 = 70 điểm giao nhau góc trong
+  square_size_mm: 24.0          # Kích thước mỗi ô vuông bàn cờ (24mm)
   image_dir: "calibration/images"
 
 target_object:

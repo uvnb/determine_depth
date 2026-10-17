@@ -63,19 +63,23 @@ def main():
         display_frame = frame.copy()
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Tìm góc bàn cờ
-        found, corners = cv2.findChessboardCorners(
-            gray, cb_size,
-            cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_FAST_CHECK + cv2.CALIB_CB_NORMALIZE_IMAGE
-        )
+        # Tìm góc bàn cờ (hỗ trợ cả khi cầm bàn cờ dọc hay ngang)
+        active_cb_size = cb_size
+        flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_FAST_CHECK + cv2.CALIB_CB_NORMALIZE_IMAGE
+        found, corners = cv2.findChessboardCorners(gray, cb_size, flags)
+        if not found and cb_size[0] != cb_size[1]:
+            rev_size = (cb_size[1], cb_size[0])
+            found, corners = cv2.findChessboardCorners(gray, rev_size, flags)
+            if found:
+                active_cb_size = rev_size
 
         # Hiển thị thông báo trạng thái
         if found:
-            cv2.drawChessboardCorners(display_frame, cb_size, corners, found)
-            status_text = "READY: Phat hien ban co! Nhan [SPACE] de luu"
+            cv2.drawChessboardCorners(display_frame, active_cb_size, corners, found)
+            status_text = f"READY: Phat hien ban co {active_cb_size[0]}x{active_cb_size[1]}! Nhan [SPACE] de luu"
             color = (0, 255, 0)
         else:
-            status_text = "Chua phat hien du ban co... Hay can chinh goc do"
+            status_text = f"Chua phat hien du {cb_size[0]}x{cb_size[1]} goc... Hay can chinh goc do"
             color = (0, 0, 255)
 
         cv2.putText(display_frame, status_text, (20, 30),

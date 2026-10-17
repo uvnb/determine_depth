@@ -37,9 +37,12 @@ def main():
     print(f"- Tìm thấy tổng cộng {len(image_files)} ảnh. Đang trích xuất góc bàn cờ...")
 
     # Chuẩn bị tọa độ điểm 3D trong không gian thực của bàn cờ
-    # Giả định mặt phẳng bàn cờ nằm tại Z = 0
-    objp = np.zeros((cb_size[0] * cb_size[1], 3), np.float32)
-    objp[:, :2] = np.mgrid[0:cb_size[0], 0:cb_size[1]].T.reshape(-1, 2) * square_size
+    # Hỗ trợ cả 2 hướng xoay ngang và xoay dọc
+    objp_normal = np.zeros((cb_size[0] * cb_size[1], 3), np.float32)
+    objp_normal[:, :2] = np.mgrid[0:cb_size[0], 0:cb_size[1]].T.reshape(-1, 2) * square_size
+
+    objp_rev = np.zeros((cb_size[0] * cb_size[1], 3), np.float32)
+    objp_rev[:, :2] = np.mgrid[0:cb_size[1], 0:cb_size[0]].T.reshape(-1, 2) * square_size
 
     objpoints = []  # Điểm 3D trong không gian thực
     imgpoints = []  # Điểm 2D tương ứng trên mặt phẳng ảnh pixel
@@ -57,18 +60,24 @@ def main():
         if img_shape is None:
             img_shape = gray.shape[::-1]
 
-        # Tìm góc bàn cờ
+        # Tìm góc bàn cờ (thử cả 2 chiều nếu không đối xứng)
         ret, corners = cv2.findChessboardCorners(gray, cb_size, None)
+        active_objp = objp_normal
+
+        if not ret and cb_size[0] != cb_size[1]:
+            rev_size = (cb_size[1], cb_size[0])
+            ret, corners = cv2.findChessboardCorners(gray, rev_size, None)
+            active_objp = objp_rev
 
         if ret:
             valid_images += 1
             # Tinh chỉnh độ chính xác góc bàn cờ đến mức sub-pixel
             corners_sub = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
-            objpoints.append(objp)
+            objpoints.append(active_objp)
             imgpoints.append(corners_sub)
             print(f"  [{idx}/{len(image_files)}] OK: {os.path.basename(fname)}")
         else:
-            print(f"  [{idx}/{len(image_files)}] BỎ QUA (không phát hiện đủ góc): {os.path.basename(fname)}")
+            print(f"  [{idx}/{len(image_files)}] BỎ QUA (không phát hiện đủ {cb_size[0]}x{cb_size[1]} góc): {os.path.basename(fname)}")
 
     if valid_images < 5:
         print(f"\n[LỖI] Chỉ có {valid_images} ảnh hợp lệ. Cần ít nhất 10-15 ảnh rõ nét để hiệu chuẩn chính xác!")
