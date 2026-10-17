@@ -17,6 +17,14 @@ target_object:
   h_real_m: 0.10                # Chiều cao thực tế của khối trụ: 10 cm = 0.10 mét
   min_contour_area: 300         # Diện tích pixel tối thiểu để lọc nhiễu (giảm nhẹ để nhận diện d=5cm ở xa)
 
+# Hiệu chỉnh khoảng cách thực nghiệm (Distance Tuning):
+# Z_cuối_cùng = (Z_pinhole * scale) + offset_m
+# - scale: Hệ số bù tỷ lệ quang học (1.0 = giữ nguyên)
+# - offset_m: Độ bù mốc đo (0.0 = đo đến tâm trục trụ; -0.025 = đo đến mặt trước của khối trụ có r=2.5cm)
+distance_tuning:
+  scale: 1.0
+  offset_m: 0.0
+
 segmentation:
   # Chế độ màu: "blue" (khối trụ xanh dương), "red" (khối trụ đỏ), hoặc "custom"
   color_mode: "blue"

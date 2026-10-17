@@ -79,10 +79,18 @@ def draw_hud(frame, detection, coords_3d, distance, fps, is_calibrated, filter_e
         bx, by, bw, bh = detection["bbox"]
         X, Y, Z = coords_3d
 
-        # 1. Vẽ khung bao và tâm đối tượng
-        cv2.rectangle(frame, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
-        cv2.circle(frame, (u, v), 6, (0, 0, 255), -1)
-        cv2.drawMarker(frame, (u, v), (255, 255, 255), cv2.MARKER_CROSS, 16, 1)
+        # 1. Vẽ đường viền và khung bao đối tượng
+        if detection.get("contour") is not None:
+            cv2.drawContours(frame, [detection["contour"]], -1, (255, 200, 0), 1)
+
+        if detection.get("rotated_rect") is not None:
+            box = cv2.boxPoints(detection["rotated_rect"])
+            box = np.intp(box)
+            cv2.drawContours(frame, [box], 0, (0, 255, 255), 2)  # Khung vàng đo đường kính w_px
+
+        cv2.rectangle(frame, (bx, by), (bx + bw, by + bh), (0, 255, 0), 1)  # Khung xanh bao ngoài
+        cv2.circle(frame, (u, v), 5, (0, 0, 255), -1)
+        cv2.drawMarker(frame, (u, v), (255, 255, 255), cv2.MARKER_CROSS, 14, 1)
 
         # 2. Bảng thông số nổi bên cạnh vật thể
         panel_x = min(bx + bw + 15, w - 240)
@@ -201,7 +209,14 @@ def main():
         dist_coeffs=dist_coeffs
     )
 
-    estimator_3d = Pinhole3DEstimator(fx=fx, fy=fy, cx=cx, cy=cy, d_real_m=d_real)
+    dist_tuning = cfg.get("distance_tuning", {})
+    dist_scale = float(dist_tuning.get("scale", 1.0))
+    dist_offset = float(dist_tuning.get("offset_m", 0.0))
+
+    estimator_3d = Pinhole3DEstimator(
+        fx=fx, fy=fy, cx=cx, cy=cy, d_real_m=d_real,
+        distance_scale=dist_scale, distance_offset_m=dist_offset
+    )
 
     # Bộ lọc làm mịn
     filter_enabled = filter_cfg.get("enabled", True)
