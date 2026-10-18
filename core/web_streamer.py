@@ -10,6 +10,7 @@
   - Tích hợp sẵn trang Dashboard hiển thị luồng video, tọa độ 3D, FPS và nhiệt độ CPU.
 """
 
+import socket
 import threading
 import time
 import cv2
@@ -109,10 +110,26 @@ class WebStreamer:
             self._running = True
             self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
             self._thread.start()
-            print(f"[LOCAL STREAM] Đã kích hoạt Web Streamer tại: http://{self.host}:{self.port}")
-            print(f"               (Mở trình duyệt trên máy tính/điện thoại để xem trực tiếp video và HUD)")
+            lan_ip = self._get_lan_ip()
+            print(f"[LOCAL STREAM] Đã kích hoạt Web Streamer thành công!")
+            print(f"  👉 Trên máy tính/điện thoại, mở trình duyệt: http://{lan_ip}:{self.port}")
+            print(f"  (Nếu mở trình duyệt ngay trên màn hình Pi: http://localhost:{self.port})")
         except Exception as e:
             print(f"[CẢNH BÁO] Không thể khởi động Web Streamer trên cổng {self.port}: {e}")
+
+    def _get_lan_ip(self) -> str:
+        """Lấy địa chỉ IP mạng nội bộ thực tế của Raspberry Pi."""
+        for target in ["192.168.50.143", "192.168.50.1", "10.255.255.255", "8.8.8.8"]:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect((target, 80))
+                ip = s.getsockname()[0]
+                s.close()
+                if ip and not ip.startswith("127."):
+                    return ip
+            except Exception:
+                pass
+        return "192.168.50.1"
 
     def stop(self):
         """Dừng Web server an toàn."""
